@@ -1,0 +1,23 @@
+{
+  "WarningDays": 60,
+  "CriticalDays": 30,
+  "WarningAlgorithm": [
+    "sha1RSA"
+  ],
+  "CriticalAlgorithm": [
+    "md5RSA"
+  ],
+  "CriticalKeySize": 1024,
+  "WarningKeySize": 2048,
+  "CommonPorts": [
+    22,
+    25,
+    443,
+    465,
+    587,
+    636,
+    993,
+    995,
+    3389
+  ]
+}

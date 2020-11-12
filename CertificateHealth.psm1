@@ -1,5 +1,6 @@
 ﻿# Source all ps1 scripts in current directory.
-Get-ChildItem (Join-Path $PSScriptRoot *.ps1) | foreach {. $_.FullName}
+Get-ChildItem (Join-Path $PSScriptRoot *.ps1) | ForEach-Object {. $_.FullName}
+Get-ChildItem (Join-Path "$PSScriptRoot\Private" *.ps1) | ForEach-Object { . $_.FullName }
 
 <# Making Parent Functions Available
 Export-ModuleMember -Function Get-CertificateFile
@@ -15,20 +16,24 @@ Export-ModuleMember -Function Get-UnhealthyCertificateNagios
  The variable is scoped globally so that it can be used with various functions
  in the module. Specify the variable by name $ExcludedThumbprint when calling
  the functions.
- 
+
  Example:
  Get-UnhealthyCertificate -ExcludedThumbprint $ExcludedThumbprint
 #>
 
 $ExcludedThumbprintFilePath = "$PSScriptRoot\ExcludedThumbprint.txt"
 if (Test-Path $ExcludedThumbprintFilePath) {
-    
+
     # Exporting variable to global scope to be used with module.
     $global:ExcludedThumbprint = Get-Content -Path $ExcludedThumbprintFilePath
-    
+
     # Setting default parameter.
     if ($PSVersionTable.PSVersion.Major -ge 3) {
         $PSDefaultParameterValues.remove("*:ExcludedThumbprint")
         $PSDefaultParameterValues.Add("Get-UnhealthyCertificate:ExcludedThumbprint",$ExcludedThumbprint)
         }
     }
+$CertValidityConfigPath = "$PSScriptRoot\CertValidityConfig.json"
+if (Test-Path $CertValidityConfigPath) {
+    Get-CertValidityConfig
+}

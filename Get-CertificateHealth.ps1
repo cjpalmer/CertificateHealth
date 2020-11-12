@@ -31,6 +31,8 @@
    Modified: 9/28/2016 02:43:52 PM
 
    Changelog:
+   Version 1.4
+    * Moved validity checks to Helper Function Get-Health
    Version 1.3.1
     * Added an example that utilizes the ComputerName parameter
     * Corrected verbiage for expired certificates in Verbose
@@ -48,25 +50,10 @@
    Checking of remote certificate files should be done through UNC path.
 .PARAMETER ComputerName
    Enter a name of a computer to check the certificate store provider via PSRP.
-.PARAMETER WarningDays
-   Specify the amount of days before the certificate expiration should be in a
-   warning state.
-.PARAMETER CriticalDays
-   Specify the amount of days before the certificate expiration should be in a
-   critical state.
 .PARAMETER ExcludedThumbprint
    Array of thumbprints of certificates that should be excluded from being checked.
    This would be used if there is a certificate that you wish to ignore from health
    checks.
-.PARAMETER WarningAlgorithm
-   Array of algorithms that are deprecated.
-.PARAMETER CriticalAlgorithm
-   Array of algorithms with known vulnerabilities.
-.PARAMETER CritialKeySize
-   Certificates with key size less than this value will be considered critical.
-.PARAMETER WarningKeySize
-   Certificates with key size less than this value and greater than the CriticalKeySize
-   will be considered warning.
 .PARAMETER CertUtilPath
    Path to the certutil.exe.
 .PARAMETER CertificateFileType
@@ -120,13 +107,7 @@ function Get-CertificateHealth
         [Parameter(ValueFromPipelineByPropertyName=$true)]
         [string[]]$Path = 'Cert:\LocalMachine\My',
         [string]$ComputerName,
-        [int]$WarningDays = 60,
-        [int]$CriticalDays = 30,
         [string[]]$ExcludedThumbprint,#=@('DF16240B462E80151BBCD7529D4C557A8CE1671C'),
-        [string[]]$WarningAlgorithm=('sha1RSA'),
-        [string[]]$CriticalAlgorithm=('md5RSA'),
-        [int]$CriticalKeySize=1024,
-        [int]$WarningKeySize=2048,
         [string]$CertUtilPath = 'C:\Windows\System32\certutil.exe',
         [string[]]$CertificateFileType = ('*.cer','*.crt','*.p7b'),
         [switch]$Recurse = $false
@@ -210,76 +191,8 @@ function Get-CertificateHealth
                             }
                     #region Check certificate expiration
 
-                    # Check certificate is within $WarningDays
-                    if ($Certificate.NotAfter -le (Get-Date).AddDays($WarningDays) -and $Certificate.NotAfter -gt (Get-Date).AddDays($CriticalDays)) {
-                        Write-Verbose "Certificate is expiring within $WarningDays days."
-                        $ValidityPeriodStatus = 'Warning'
-                        $ValidityPeriodStatusMessage = "Certificate expiring in $($Certificate.Days) days."
-                        }
-                    # Check certificate is within $CriticalDays
-                    elseif ($Certificate.NotAfter -le (Get-Date).AddDays($CriticalDays) -and $Certificate.NotAfter -gt (Get-Date)) {
-                        Write-Verbose "Certificate is expiring within $CriticalDays days."
-                        $ValidityPeriodStatus = 'Critical'
-                        $ValidityPeriodStatusMessage = "Certificate expiring in $($Certificate.Days) days."
-                        }
-                    # Check certificate is expired
-                    elseif ($Certificate.NotAfter -le (Get-Date)) {
-                        Write-Verbose "Certificate is expired: $($Certificate.Days) days."
-                        $ValidityPeriodStatus = 'Critical'
-                        $ValidityPeriodStatusMessage = "Certificate expired: $($Certificate.Days) days."
-                        }
-                    # Certificate validity period is healthy.
-                    else {
-                        Write-Verbose "Certificate is within validity period."
-                        $ValidityPeriodStatus = 'OK'
-                        $ValidityPeriodStatusMessage = "Certificate expires in $($Certificate.Days) days."
-                        }
-                    #endregion
-
-                    #region Check certificate algorithm
-                    if ($CriticalAlgorithm -contains $Certificate.SignatureAlgorithm) {
-                        Write-Verbose "Certificate uses critical algorithm."
-                        $AlgorithmStatus = 'Critical'
-                        $AlgorithmStatusMessage = "Certificate uses a vulnerable algorithm $($Certificate.SignatureAlgorithm)."
-                        }
-                    elseif ($WarningAlgorithm -contains $Certificate.SignatureAlgorithm) {
-                        Write-Verbose "Certificate uses warning algorithm."
-                        $AlgorithmStatus = 'Warning'
-                        $AlgorithmStatusMessage = "Certificate uses the deprecated algorithm $($Certificate.SignatureAlgorithm)."
-                        }
-                    else {
-                        Write-Verbose "Certificate uses acceptable algorithm."
-                        $AlgorithmStatus = 'OK'
-                        $AlgorithmStatusMessage = "Certificate uses valid algorithm $($Certificate.SignatureAlgorithm)."
-                        }
-                    #endregion
-
-                    #region Check MinimumKeySize
-                    Write-Verbose 'Checking minimum key length.'
-                    if ($Certificate.KeySize -lt $CriticalKeySize) {
-                        # Key Size is critical
-                        Write-Verbose 'Certificate key length is critical.'
-                        $KeySizeStatus = 'Critical'
-                        $KeySizeStatusMessage = "Certificate key size $($Certificate.KeySize) is less than $CriticalKeySize."
-                        }
-                    elseif ($Certificate.KeySize -lt $WarningKeySize -and $Certificate.KeySize -ge $CriticalKeySize) {
-                        # Key Size is warning
-                        Write-Verbose 'Certificate key length is warning.'
-                        $KeySizeStatus = 'Warning'
-                        $KeySizeStatusMessage = "Certificate key size $($Certificate.KeySize) is less than $WarningKeySize."
-                        }
-                    elseif ($Certificate.KeySize -ge $WarningKeySize) {
-                        # Key Size is OK
-                        Write-Verbose 'Certificate key length is OK.'
-                        $KeySizeStatus = 'OK'
-                        $KeySizeStatusMessage = "Certificate key size $($Certificate.KeySize) is greater than or equal to $WarningKeySize."
-                        }
-                    else {
-                        # Key Size is OK
-                        Write-Verbose 'Certificate key length is Unknown.'
-                        $KeySizeStatus = 'Unknown'
-                        $KeySizeStatusMessage = "Certificate key size is unknown."
-                        }
+                    #region Query new private function and populate the CertValidity variable
+                    $CertValidity = Get-Health -Certificate $Certificate
                     #endregion
 
                     Write-Verbose 'Adding additional properties to the certificate object.'
@@ -293,13 +206,13 @@ function Get-CertificateHealth
                             NotAfter = $Certificate.NotAfter
                             Days = $Certificate.Days
                             Thumbprint = $Certificate.Thumbprint
-                            ValidityPeriodStatus = $ValidityPeriodStatus
-                            ValidityPeriodStatusMessage = $ValidityPeriodStatusMessage
-                            AlgorithmStatus = $AlgorithmStatus
-                            AlgorithmStatusMessage = $AlgorithmStatusMessage
+                            ValidityPeriodStatus = $CertValidity.ValidityPeriodStatus
+                            ValidityPeriodStatusMessage = $CertValidity.ValidityPeriodStatusMessage
+                            AlgorithmStatus = $CertValidity.AlgorithmStatus
+                            AlgorithmStatusMessage = $CertValidity.AlgorithmStatusMessage
                             KeySize = $Certificate.KeySize
-                            KeySizeStatus = $KeySizeStatus
-                            KeySizeStatusMessage = $KeySizeStatusMessage
+                            KeySizeStatus = $CertValidity.KeySizeStatus
+                            KeySizeStatusMessage = $CertValidity.KeySizeStatusMessage
                             }
                         }
                     else {
@@ -312,13 +225,13 @@ function Get-CertificateHealth
                             NotAfter = $Certificate.NotAfter
                             Days = $Certificate.Days
                             Thumbprint = $Certificate.Thumbprint
-                            ValidityPeriodStatus = $ValidityPeriodStatus
-                            ValidityPeriodStatusMessage = $ValidityPeriodStatusMessage
-                            AlgorithmStatus = $AlgorithmStatus
-                            AlgorithmStatusMessage = $AlgorithmStatusMessage
+                            ValidityPeriodStatus = $CertValidity.ValidityPeriodStatus
+                            ValidityPeriodStatusMessage = $CertValidity.ValidityPeriodStatusMessage
+                            AlgorithmStatus = $CertValidity.AlgorithmStatus
+                            AlgorithmStatusMessage = $CertValidity.AlgorithmStatusMessage
                             KeySize = $Certificate.KeySize
-                            KeySizeStatus = $KeySizeStatus
-                            KeySizeStatusMessage = $KeySizeStatusMessage
+                            KeySizeStatus = $CertValidity.KeySizeStatus
+                            KeySizeStatusMessage = $CertValidity.KeySizeStatusMessage
                             }
                         }
 
