@@ -22,11 +22,11 @@ function Get-ListeningPort {
         $Ports = $CertValidityConfiguration.CommonPorts #@(22,25,443,465,587,636,993,995,3389)
     )
 
-    Write-Verbose -Message "Common Ports: $Ports"
+    Write-Verbose -Message "GLP:Common Ports: $Ports"
     $IPv4Regex = '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
     $ListeningPorts = Get-NetTCPConnection -State Listen | Where-Object -FilterScript {$_.LocalAddress -match $IPv4Regex}
     foreach ($Port in $ListeningPorts) {
-        Write-Verbose -Message "Checking for common listening port: $Port"
+        Write-Verbose -Message "GLP:Checking for common listening port: $Port"
         if ($Ports -contains $Port.LocalPort) {
             Write-Output $Port
         }
